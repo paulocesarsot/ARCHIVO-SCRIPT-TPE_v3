@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Extractor de Datos</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      margin: 0;
+      background-color: #f9f9f9;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .formulario {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 800px;
+      margin: auto;
+    }
+
+    .formulario input[type="text"],
+    .formulario textarea {
+      padding: 10px;
+      font-size: 1rem;
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      resize: vertical;
+    }
+
+    .botones {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .botones button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      transition: background-color 0.2s ease;
+    }
+
+    .botones button:hover {
+      background-color: #0056b3;
+    }
+
+    .tabla-container {
+      margin-top: 30px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+    }
+
+    th, td {
+      padding: 8px;
+      border: 1px solid #ccc;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+
+    th {
+      background-color: #f0f0f0;
+    }
+
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 1.4rem;
+      }
+
+      .botones {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Extractor de Datos de Texto</h1>
+
+  <div class="formulario">
+    <input type="text" id="nombreUsuario" placeholder="Ingresa tu nombre" />
+    <textarea id="inputText" rows="10" placeholder="Pega aquí el texto..."></textarea>
+
+    <div class="botones">
+      <button onclick="generarFila()">Generar</button>
+      <button onclick="limpiarFormulario()">Limpiar</button>
+      <button onclick="exportarExcel()">Exportar a Excel</button>
+    </div>
+  </div>
+
+  <div class="tabla-container">
+    <table id="tablaResultado">
+      <thead>
+        <tr id="encabezadoFila"></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Script para funcionalidad -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    const encabezados = [
+      "USUARIO", "FECHA", "FOLIO", "NÚMERO DE TICKET", "SD", "TCA", "CLIENTE",
+      "DIRECCION", "NUMERO DE CUENTA", "OT", "REPORTE DE CLIENTE", "RAZON SOCIAL",
+      "SEGMENTO", "TELÉFONO O CONTACTO", "EQUIPO U ONT"
+    ];
+
+    const patrones = {
+      "NÚMERO DE TICKET": /Número del ticket\s*[:\-]?\s*(\d+)/i,
+      "NUMERO DE CUENTA": /Cuenta\s*[:\-]?\s*(\d+)/i,
+      "RAZON SOCIAL": /Razón social\/Titular\s*[:\-]?\s*([^\n,]+)/i,
+      "SEGMENTO": /Segmento\s*[:\-]?\s*([^\n,]+)/i,
+      "DIRECCION": /Dirección de instalación\s*[:\-]?\s*(.+?),/i,
+      "REPORTE DE CLIENTE": /Falla reportada\s*[:\-]?\s*(.+)/i,
+      "FOLIO": /Folio FPE\s*[:\-]?\s*(\w+)/i,
+      "FECHA": /Fecha de corte\s*[:\-]?\s*(\d{2}-\d{2}-\d{4})/i
+    };
+
+    window.onload = () => {
+      const encabezadoFila = document.getElementById("encabezadoFila");
+      encabezados.forEach(e => {
+        const th = document.createElement("th");
+        th.textContent = e;
+        encabezadoFila.appendChild(th);
+      });
+    };
+
+    function generarFila() {
+      const nombre = document.getElementById("nombreUsuario").value.trim();
+      const texto = document.getElementById("inputText").value;
+
+      const fila = {};
+
+      encabezados.forEach(encabezado => {
+        if (encabezado === "USUARIO") {
+          fila[encabezado] = nombre;
+
+        } else if (encabezado === "EQUIPO U ONT") {
+          const marca = texto.match(/Marca y modelo\s*[:\-]?\s*([^\n,]+)/i);
+          const modelo = texto.match(/Modelo de la ONT\s*[:\-]?\s*([^\n,]+)/i);
+          const equipo = [marca?.[1]?.trim(), modelo?.[1]?.trim()].filter(Boolean).join(" / ");
+          fila[encabezado] = equipo;
+
+        } else if (encabezado === "TELÉFONO O CONTACTO") {
+          const contacto = texto.match(/Contacto para seguimiento\s*[:\-]?\s*([^\n,]+)/i);
+          const telefono = texto.match(/Teléfono Contacto en sitio 1\s*[:\-]?\s*([\d\s]+)/i);
+          const combinado = [contacto?.[1]?.trim(), telefono?.[1]?.trim()].filter(Boolean).join(" / ");
+          fila[encabezado] = combinado;
+
+        } else if (patrones[encabezado]) {
+          const match = texto.match(patrones[encabezado]);
+          fila[encabezado] = match ? match[1].trim() : "";
+        } else {
+          fila[encabezado] = "";
+        }
+      });
+
+      const tbody = document.querySelector("#tablaResultado tbody");
+      const tr = document.createElement("tr");
+
+      encabezados.forEach(e => {
+        const td = document.createElement("td");
+        td.textContent = fila[e];
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    }
+
+    function limpiarFormulario() {
+      document.getElementById("nombreUsuario").value = "";
+      document.getElementById("inputText").value = "";
+    }
+
+    function exportarExcel() {
+      const tabla = document.getElementById("tablaResultado");
+      const wb = XLSX.utils.table_to_book(tabla, { sheet: "Datos" });
+      XLSX.writeFile(wb, "datos.xlsx");
+    }
+  </script>
+</body>
+</html>
